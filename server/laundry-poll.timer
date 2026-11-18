@@ -1,0 +1,11 @@
+[Unit]
+Description=Poll laundry status every minute
+
+[Timer]
+OnCalendar=*-*-* *:*:00
+AccuracySec=1s
+Persistent=true
+Unit=laundry-poll.service
+
+[Install]
+WantedBy=timers.target

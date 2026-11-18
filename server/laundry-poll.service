@@ -1,0 +1,15 @@
+[Unit]
+Description=Laundry status poller
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=laundry
+Group=laundry
+ExecStart=/usr/bin/python3 /opt/laundry/poll.py
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
+ReadWritePaths=/opt/laundry/data

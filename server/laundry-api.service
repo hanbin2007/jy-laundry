@@ -1,0 +1,19 @@
+[Unit]
+Description=Laundry history API
+After=network.target
+
+[Service]
+Type=simple
+User=laundry
+Group=laundry
+ExecStart=/usr/bin/python3 /opt/laundry/api.py
+Restart=always
+RestartSec=2
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
+ReadWritePaths=/opt/laundry/data
+
+[Install]
+WantedBy=multi-user.target

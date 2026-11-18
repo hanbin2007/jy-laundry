@@ -1,0 +1,14 @@
+.DS_Store
+
+# Xcode
+xcuserdata/
+*.xcuserstate
+DerivedData/
+
+# Python
+__pycache__/
+*.pyc
+
+# Secrets
+server/token
+server/data/
