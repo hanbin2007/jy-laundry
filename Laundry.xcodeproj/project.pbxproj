@@ -8,7 +8,6 @@
 
 /* Begin PBXBuildFile section */
 		AA00000000000000000000D2 /* LaundryWidgetsExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = AA00000000000000000000D3 /* LaundryWidgetsExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		AA00000000000000000000E2 /* Laundry/LaundryActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000000000000000000E1 /* Laundry/LaundryActivityAttributes.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -39,7 +38,6 @@
 		AA00000000000000000000A3 /* Laundry.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Laundry.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA00000000000000000000C1 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		AA00000000000000000000D3 /* LaundryWidgetsExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = LaundryWidgetsExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
-		AA00000000000000000000E1 /* Laundry/LaundryActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Laundry/LaundryActivityAttributes.swift; sourceTree = "<group>"; };
 		AA00000000000000000000F1 /* WidgetsInfo.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = WidgetsInfo.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -52,6 +50,11 @@
 		AA00000000000000000000EA /* LaundryWidgets */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = LaundryWidgets;
+			sourceTree = "<group>";
+		};
+		AA00000000000000000000F5 /* Shared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Shared;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -79,7 +82,7 @@
 			children = (
 				AA00000000000000000000B6 /* Laundry */,
 				AA00000000000000000000EA /* LaundryWidgets */,
-				AA00000000000000000000E1 /* Laundry/LaundryActivityAttributes.swift */,
+				AA00000000000000000000F5 /* Shared */,
 				AA00000000000000000000C1 /* Info.plist */,
 				AA00000000000000000000F1 /* WidgetsInfo.plist */,
 				AA00000000000000000000A2 /* Products */,
@@ -114,6 +117,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				AA00000000000000000000B6 /* Laundry */,
+				AA00000000000000000000F5 /* Shared */,
 			);
 			name = Laundry;
 			packageProductDependencies = (
@@ -136,6 +140,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				AA00000000000000000000EA /* LaundryWidgets */,
+				AA00000000000000000000F5 /* Shared */,
 			);
 			name = LaundryWidgetsExtension;
 			packageProductDependencies = (
@@ -211,7 +216,6 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				AA00000000000000000000E2 /* Laundry/LaundryActivityAttributes.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

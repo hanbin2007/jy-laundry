@@ -1,0 +1,71 @@
+#if DEBUG
+import SwiftUI
+import WidgetKit
+
+/// Launch with `-gallery` to see the widgets and Live Activity rendered in the app (no Lock Screen needed).
+struct WidgetGallery: View {
+    @Environment(\.colorScheme) private var scheme
+
+    private var busyEntry: StatusEntry {
+        var e = StatusEntry.sample
+        e.items[0].state = .busy
+        e.items[0].progress = 0.35
+        e.items = [
+            .init(id: 1, label: "57号机", number: "57", state: .busy, progress: 0.35, endsAt: .now.addingTimeInterval(24 * 60)),
+            e.items[1],
+        ]
+        return e
+    }
+
+    private var activity: LaundryActivityAttributes.ContentState {
+        .init(building: "前3栋", machines: [
+            .init(id: 1, label: "57号机", number: "57", state: .idle, progress: nil, startedAt: nil, endsAt: nil),
+            .init(id: 2, label: "58号机", number: "58", state: .busy, progress: 0.62,
+                  startedAt: .now.addingTimeInterval(-22 * 60), endsAt: .now.addingTimeInterval(11 * 60)),
+        ], updatedAt: .now)
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                HStack(spacing: 16) {
+                    tile(StatusEntry.sample, family: .systemSmall, width: 170, height: 170)
+                    tile(busyEntry, family: .systemSmall, width: 170, height: 170)
+                }
+                tile(StatusEntry.sample, family: .systemMedium, width: 360, height: 170)
+                tile(busyEntry, family: .systemMedium, width: 360, height: 170)
+
+                HStack(spacing: 14) {
+                    StatusWidgetView(entry: .sample, familyOverride: .accessoryCircular)
+                        .frame(width: 72, height: 72)
+                    StatusWidgetView(entry: busyEntry, familyOverride: .accessoryRectangular)
+                        .frame(width: 170, height: 72)
+                }
+                .padding(14)
+                .background(.black.opacity(0.35), in: .rect(cornerRadius: 20))
+                .environment(\.colorScheme, .dark)
+
+                LockScreenActivity(state: activity)
+                    .background(.ultraThinMaterial, in: .rect(cornerRadius: 26))
+                    .environment(\.colorScheme, .dark)
+                VStack(spacing: 8) {
+                    ForEach(activity.machines) { ActivityRow(machine: $0, updatedAt: activity.updatedAt) }
+                }
+                .padding(16)
+                .background(.black, in: .rect(cornerRadius: 40))
+                .environment(\.colorScheme, .dark)
+            }
+            .padding(16)
+        }
+        .background(LinearGradient(colors: [.indigo, .teal], startPoint: .top, endPoint: .bottom).ignoresSafeArea())
+    }
+
+    private func tile(_ entry: StatusEntry, family: WidgetFamily, width: CGFloat, height: CGFloat) -> some View {
+        StatusWidgetView(entry: entry, familyOverride: family)
+            .padding(16)
+            .frame(width: width, height: height)
+            .background(WidgetBackdrop(entry: entry))
+            .clipShape(.rect(cornerRadius: 24, style: .continuous))
+    }
+}
+#endif

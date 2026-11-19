@@ -23,14 +23,16 @@ struct HistoryAPI {
     let baseURL: URL
     let token: String
 
-    func fetch(hours: Int = 3) async throws -> Snapshot {
+    /// `live` asks the server to read the vendor right now (rate-limited server side);
+    /// otherwise it answers from the once-a-minute poll.
+    func fetch(hours: Int = 24, live: Bool = true) async throws -> Snapshot {
         guard var comps = URLComponents(url: baseURL.appendingPathComponent("api/v1/overview"),
                                         resolvingAgainstBaseURL: false) else {
             throw APIError.badURL
         }
         comps.queryItems = [
             URLQueryItem(name: "hours", value: String(hours)),
-            URLQueryItem(name: "live", value: "1")
+            URLQueryItem(name: "live", value: live ? "1" : "0")
         ]
         guard let url = comps.url else { throw APIError.badURL }
 
