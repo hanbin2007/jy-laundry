@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// The main screen, for the machine in view:
-/// how long it has left, its last 24 hours, and, side by side, its idle rate by hour and the machine itself in 3D.
+/// how long it has left, its last 24 hours, and, side by side, its usage rate by hour and the machine itself in 3D.
 /// Swipe the machine to switch.
 ///
 /// Layout grid: every line of text starts on one left edge; sections are 32 pt apart; in the lower half
@@ -400,7 +400,7 @@ private struct LowerHalf: View {
     }
 }
 
-/// Which machine, then its idle rate for each hour of the day.
+/// Which machine, then its usage rate for each hour of the day.
 private struct MachineColumn: View {
     let machine: MachineState
     let forecast: Forecast
@@ -410,7 +410,7 @@ private struct MachineColumn: View {
 
     var body: some View {
         let hour = Calendar.current.component(.hour, from: .now)
-        let now = forecast.hours[hour].availability
+        let now = forecast.hours[hour].utilization
 
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .firstTextBaseline, spacing: 3) {
@@ -427,7 +427,7 @@ private struct MachineColumn: View {
             .accessibilityLabel(machine.label)
             .accessibilityAddTraits(.isHeader)
 
-            Text("各时段空闲率")
+            Text("各时段使用率")
                 .font(.system(size: 17, weight: .semibold))
                 .padding(.top, 28)
             Group {
@@ -489,10 +489,10 @@ private struct HourBars: View {
         GeometryReader { geo in
             HStack(alignment: .bottom, spacing: Self.gap) {
                 ForEach(0..<24, id: \.self) { h in
-                    let a = forecast.hours[h].availability
+                    let u = forecast.hours[h].utilization
                     UnevenRoundedRectangle(topLeadingRadius: 2, topTrailingRadius: 2)
                         .fill(h == hour ? Palette.water : light)
-                        .frame(height: a.map { max(2, geo.size.height * $0) } ?? 0)
+                        .frame(height: u.map { max(2, geo.size.height * $0) } ?? 0)
                         .frame(maxWidth: .infinity)
                 }
             }
@@ -504,14 +504,14 @@ private struct HourBars: View {
                 .frame(height: 1)
         }
         .accessibilityElement()
-        .accessibilityLabel("各时段空闲率")
+        .accessibilityLabel("各时段使用率")
         .accessibilityValue(summary)
     }
 
     private var summary: String {
         var parts: [String] = []
-        if let a = forecast.hours[hour].availability { parts.append("现在（\(hour) 时）\(Fmt.percent(a))") }
-        if let best = forecast.bestHour() { parts.append("未来 12 小时内 \(best.hour) 时最高（\(Fmt.percent(best.availability))）") }
+        if let u = forecast.hours[hour].utilization { parts.append("现在（\(hour) 时）\(Fmt.percent(u))") }
+        if let peak = forecast.peakUsageHour() { parts.append("未来 12 小时内 \(peak.hour) 时最高（\(Fmt.percent(peak.utilization))）") }
         return parts.isEmpty ? "暂无足够记录" : parts.joined(separator: "，")
     }
 }
