@@ -6,6 +6,7 @@ final class LiveActivityManager {
     static let shared = LiveActivityManager()
 
     private var activity: Activity<LaundryActivityAttributes>?
+    private var lastState: LaundryActivityAttributes.ContentState?
 
     private init() {
         activity = Activity<LaundryActivityAttributes>.activities.first
@@ -19,21 +20,28 @@ final class LiveActivityManager {
             return
         }
 
+        let fetched = snapshot.fetchedAt
         let state = LaundryActivityAttributes.ContentState(
-            idleCount: snapshot.machines.filter(\.isIdle).count,
-            machines: snapshot.machines.map {
+            building: snapshot.machines.first?.building ?? "洗衣房",
+            machines: snapshot.sortedMachines.map {
                 LaundryActivityAttributes.Machine(
                     id: $0.id,
                     label: $0.label,
-                    idle: $0.isIdle,
-                    remaining: $0.remaining
+                    number: $0.number,
+                    state: $0.drumState,
+                    progress: $0.progress,
+                    startedAt: $0.cycleStart(fetchedAt: fetched),
+                    endsAt: $0.cycleEnd(fetchedAt: fetched)
                 )
             },
-            updatedAt: now
+            updatedAt: fetched
         )
         let content = ActivityContent(state: state, staleDate: Self.staleDate(now, end: end))
 
         if let activity {
+            // Same picture as last time: skip the update and save the system's budget.
+            guard state != lastState else { return }
+            lastState = state
             Task { await activity.update(content) }
             return
         }
@@ -45,6 +53,7 @@ final class LiveActivityManager {
                 content: content,
                 pushType: nil
             )
+            lastState = state
         } catch {
             print("live activity request failed: \(error)")
         }
@@ -53,6 +62,7 @@ final class LiveActivityManager {
     func stop() {
         guard let activity else { return }
         self.activity = nil
+        lastState = nil
         Task { await activity.end(nil, dismissalPolicy: .immediate) }
     }
 
