@@ -2,11 +2,13 @@
 import Foundation
 
 /// Debug-only launch arguments for looking at every state without waiting for real laundry:
-///   -demo busy | mixed | spin      use a made-up snapshot instead of the server
+///   -demo busy | mixed | spin | trio   use a made-up snapshot instead of the server (trio: three machines)
 ///   -scroll dial | forecast        start scrolled to a section
 ///   -open <machine id>             open a machine's detail screen (记录 tab)
 ///   -tab records | settings        start on another tab
 ///   -machine <index>               show another machine on the overview
+///   -activity                      keep the Live Activity on whatever the time of day
+///   -staleSoon                     let the Live Activity go out of date after a few seconds
 enum Demo {
     static var mode: String? { value(after: "-demo") }
     static var scroll: String? { value(after: "-scroll") }
@@ -17,6 +19,8 @@ enum Demo {
     static var switchAfter: Double? { value(after: "-switchAfter").flatMap(Double.init) }
     static var showsSettings: Bool { ProcessInfo.processInfo.arguments.contains("-settings") }
     static var forcesActivity: Bool { ProcessInfo.processInfo.arguments.contains("-activity") }
+    /// Lets the Live Activity go out of date a few seconds after it is shown.
+    static var staleSoon: Bool { ProcessInfo.processInfo.arguments.contains("-staleSoon") }
 
     private static func value(after flag: String) -> String? {
         let args = ProcessInfo.processInfo.arguments
@@ -54,6 +58,8 @@ enum Demo {
 
         let a: (Int, String, [[Int]])
         let b: (Int, String, [[Int]])
+        // "trio" adds a third machine, to see how the layouts hold with three.
+        let c: (Int, String, [[Int]])? = mode == "trio" ? (20, "31分钟", history(seed: 3, endState: 20, endRun: 5)) : nil
         switch mode {
         case "busy":
             a = (20, "11分钟", history(seed: 7, endState: 20, endRun: 25))
@@ -78,7 +84,7 @@ enum Demo {
         {"ok":true,"generatedAt":\(now),"window":{"start":\(start),"minutes":\(minutes)},
          "lastPoll":{"minute":\(now - now % 60),"ok":true,"total":2,"idle":0,"error":null,"ageSeconds":2,"fetchedAt":\(now - 2)},
          "series":[],
-         "machines":[\(machine(1, "57号机", a)),\(machine(2, "58号机", b))]}
+         "machines":[\(machine(1, "57号机", a)),\(machine(2, "58号机", b))\(c.map { "," + machine(3, "59号机", $0) } ?? "")]}
         """
         return try? JSONDecoder().decode(Snapshot.self, from: Data(json.utf8))
     }

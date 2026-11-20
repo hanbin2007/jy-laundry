@@ -11,7 +11,8 @@ struct WidgetGallery: View {
         e.items[0].state = .busy
         e.items[0].progress = 0.35
         e.items = [
-            .init(id: 1, label: "57号机", number: "57", state: .busy, progress: 0.35, endsAt: .now.addingTimeInterval(24 * 60)),
+            .init(id: 1, label: "57号机", number: "57", state: .busy, progress: 0.35,
+                  startsAt: .now.addingTimeInterval(-13 * 60), endsAt: .now.addingTimeInterval(24 * 60)),
             e.items[1],
         ]
         return e
@@ -38,8 +39,10 @@ struct WidgetGallery: View {
                 HStack(spacing: 14) {
                     StatusWidgetView(entry: .sample, familyOverride: .accessoryCircular)
                         .frame(width: 72, height: 72)
+                    StatusWidgetView(entry: busyEntry, familyOverride: .accessoryCircular)
+                        .frame(width: 72, height: 72)
                     StatusWidgetView(entry: busyEntry, familyOverride: .accessoryRectangular)
-                        .frame(width: 170, height: 72)
+                        .frame(width: 160, height: 72)
                 }
                 .padding(14)
                 .background(.black.opacity(0.35), in: .rect(cornerRadius: 20))
@@ -48,8 +51,14 @@ struct WidgetGallery: View {
                 LockScreenActivity(state: activity)
                     .background(.ultraThinMaterial, in: .rect(cornerRadius: 26))
                     .environment(\.colorScheme, .dark)
-                VStack(spacing: 8) {
-                    ForEach(activity.machines) { ActivityRow(machine: $0, updatedAt: activity.updatedAt) }
+                // A rough stand-in for the expanded island; the real one is laid out by the system.
+                VStack(spacing: 10) {
+                    HStack(alignment: .top) {
+                        IslandExpandedLeading(state: activity, isStale: false)
+                        Spacer()
+                        IslandExpandedTrailing(state: activity, isStale: false)
+                    }
+                    IslandExpandedBottom(state: activity, isStale: false)
                 }
                 .padding(16)
                 .background(.black, in: .rect(cornerRadius: 40))

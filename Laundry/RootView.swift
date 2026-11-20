@@ -32,6 +32,12 @@ struct RootView: View {
             await store.liveLoop()
         }
         .sensoryFeedback(.success, trigger: store.freedTick)
+        // A tap on a widget or the Live Activity lands on the overview, on the machine it was about.
+        .onOpenURL { url in
+            guard url.scheme == "laundry" else { return }
+            tab = .overview
+            store.linkedMachineID = DeepLink.machineID(in: url)
+        }
         .alert("未开启通知", isPresented: Binding(
             get: { store.notice != nil },
             set: { if !$0 { store.notice = nil } }

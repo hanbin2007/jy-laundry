@@ -81,6 +81,12 @@ struct OverviewView: View {
         }
         .animation(.smooth(duration: 0.35), value: machine?.id)
         .sensoryFeedback(.selection, trigger: machine?.id)
+        .onChange(of: store.linkedMachineID, initial: true) { _, id in
+            guard let id else { return }
+            path = []
+            selectedID = id
+            store.linkedMachineID = nil
+        }
         #if DEBUG
         .task(id: machines.count) {
             if selectedID == nil, let k = Demo.machine, machines.indices.contains(k) { selectedID = machines[k].id }

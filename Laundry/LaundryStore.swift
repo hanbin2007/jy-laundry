@@ -21,6 +21,8 @@ final class LaundryStore {
     /// Reminder key (machine id, or `anyMachine`) -> when it should fire.
     private(set) var reminders: [Int: Date] = [:]
     var notice: String?
+    /// A machine a widget or the Live Activity asked to see; the overview shows it and clears this.
+    var linkedMachineID: Int?
 
     private var weekFetched: Date?
     /// Bumped on every server change, so answers to requests made under the old settings are dropped.
