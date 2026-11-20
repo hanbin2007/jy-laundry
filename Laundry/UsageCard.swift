@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// The last 24 hours as one horizontal bar per machine on a shared clock axis.
 /// Press and hold, then drag, to read the state at any moment.
@@ -51,7 +52,19 @@ struct UsageCard: View {
                         if let x = scrubX { scrubLine(x: x, machines: machines.count) }
                     }
                     .contentShape(.rect)
-                    .gesture(scrub(width: width))
+                    .gesture(LongPressScrubGesture(
+                        onChanged: { point in
+                            let x = min(width - 1, max(0, point.x))
+                            scrubX = x
+                            scrubMinute = Int(x / max(1, width) * CGFloat(store.windowMinutes))
+                        },
+                        onEnded: {
+                            withAnimation(.smooth) {
+                                scrubX = nil
+                                scrubMinute = nil
+                            }
+                        }
+                    ))
                 }
                 .frame(height: CGFloat(machines.count) * 40 + 18)
                 .sensoryFeedback(.selection, trigger: scrubX.map { Int($0 / 8) })
@@ -95,23 +108,6 @@ struct UsageCard: View {
         }
     }
 
-    private func scrub(width: CGFloat) -> some Gesture {
-        LongPressGesture(minimumDuration: 0.2)
-            .sequenced(before: DragGesture(minimumDistance: 0))
-            .onChanged { value in
-                guard case .second(true, let drag) = value else { return }
-                let x = min(width - 1, max(0, drag?.location.x ?? scrubX ?? width))
-                scrubX = x
-                scrubMinute = Int(x / max(1, width) * CGFloat(store.windowMinutes))
-            }
-            .onEnded { _ in
-                withAnimation(.smooth) {
-                    scrubX = nil
-                    scrubMinute = nil
-                }
-            }
-    }
-
     /// The moment under the finger, in the same shape as the totals it stands in for.
     private func readout(minute: Int, machines: [MachineState]) -> some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -139,6 +135,35 @@ struct UsageCard: View {
             .frame(width: 1.5, height: CGFloat(machines) * 40)
             .offset(x: x)
             .allowsHitTesting(false)
+    }
+}
+
+/// UIKit long-press gesture for scrubbing inside a ScrollView: quick vertical drags pass straight
+/// through to scroll the page, while holding for 0.2s claims the touch for horizontal scrubbing.
+private struct LongPressScrubGesture: UIGestureRecognizerRepresentable {
+    var minimumPressDuration: TimeInterval = 0.2
+    var onChanged: (CGPoint) -> Void
+    var onEnded: () -> Void
+
+    func makeUIGestureRecognizer(context: Context) -> UILongPressGestureRecognizer {
+        let recognizer = UILongPressGestureRecognizer()
+        recognizer.minimumPressDuration = minimumPressDuration
+        return recognizer
+    }
+
+    func updateUIGestureRecognizer(_ recognizer: UILongPressGestureRecognizer, context: Context) {
+        recognizer.minimumPressDuration = minimumPressDuration
+    }
+
+    func handleUIGestureRecognizerAction(_ recognizer: UILongPressGestureRecognizer, context: Context) {
+        switch recognizer.state {
+        case .began, .changed:
+            onChanged(context.converter.location(in: .local))
+        case .ended, .cancelled, .failed:
+            onEnded()
+        default:
+            break
+        }
     }
 }
 
