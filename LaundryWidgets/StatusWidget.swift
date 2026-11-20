@@ -33,11 +33,12 @@ struct StatusProvider: TimelineProvider {
             let fetched = snap.fetchedAt
             let items = snap.sortedMachines.map {
                 StatusEntry.Item(id: $0.id, label: $0.label, number: $0.number, state: $0.drumState,
-                                 progress: $0.progress, endsAt: $0.cycleEnd(fetchedAt: fetched))
+                                 progress: $0.progress, startsAt: $0.cycleStart(fetchedAt: fetched),
+                                 endsAt: $0.cycleEnd(fetchedAt: fetched))
             }
             // The server keeps answering from its database even if it stopped reading the machines.
             let stale = !(snap.lastPoll?.ok ?? false) || Date().timeIntervalSince(fetched) > 10 * 60
-            return StatusEntry(date: .now, building: snap.machines.first?.building ?? "洗衣房", items: items,
+            return StatusEntry(date: .now, building: snap.machines.first?.building ?? Wording.roomNoun, items: items,
                                failed: false, stale: stale, updatedAt: snap.lastPoll == nil ? nil : fetched)
         } catch {
             return .failure(.now)
@@ -54,7 +55,7 @@ struct StatusWidget: Widget {
                 .containerBackground(for: .widget) { WidgetBackdrop(entry: entry) }
         }
         .configurationDisplayName("洗衣房")
-        .description("显示各设备的状态及剩余时间。")
+        .description("查看洗衣机是否空闲，以及预计完成时间。")
         .supportedFamilies([.systemSmall, .systemMedium, .accessoryCircular, .accessoryRectangular, .accessoryInline])
     }
 }

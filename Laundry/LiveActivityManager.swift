@@ -36,7 +36,12 @@ final class LiveActivityManager {
             },
             updatedAt: fetched
         )
-        let content = ActivityContent(state: state, staleDate: Self.staleDate(now, end: end))
+        #if DEBUG
+        let staleDate = Demo.staleSoon ? now.addingTimeInterval(6) : Self.staleDate(now, end: end)
+        #else
+        let staleDate = Self.staleDate(now, end: end)
+        #endif
+        let content = ActivityContent(state: state, staleDate: staleDate)
 
         if let activity {
             // Same picture as last time: skip the update and save the system's budget.

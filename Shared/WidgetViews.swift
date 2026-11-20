@@ -1,7 +1,10 @@
 import SwiftUI
 import WidgetKit
 
-// Views shared by the widget extension and the app's debug gallery.
+// The Home Screen and Lock Screen widgets. Shared with the app's debug gallery.
+//
+// Small answers one question: is a washer free, and if not, when. Medium adds each machine.
+// The Lock Screen sizes say the same in one ring, three lines or one line.
 
 // MARK: - Entry
 
@@ -12,6 +15,7 @@ struct StatusEntry: TimelineEntry {
         let number: String
         var state: DrumState
         var progress: Double?
+        var startsAt: Date? = nil
         let endsAt: Date?
         /// True once the estimated finish has passed but the server has not confirmed it yet.
         var predicted = false
@@ -35,6 +39,12 @@ struct StatusEntry: TimelineEntry {
             .min { ($0.endsAt ?? .distantFuture) < ($1.endsAt ?? .distantFuture) }
     }
 
+    /// The machine a tap should open: a free one if there is one, otherwise the next to finish.
+    var link: URL {
+        let target = items.first { $0.state == .idle } ?? soonest
+        return target.map { DeepLink.machine($0.id) } ?? DeepLink.overview
+    }
+
     /// The same entry as it should look at `later`, with finished cycles shown as (probably) free.
     func advanced(to later: Date) -> StatusEntry {
         var copy = self
@@ -55,23 +65,13 @@ struct StatusEntry: TimelineEntry {
         date: .now, building: "前3栋",
         items: [
             Item(id: 1, label: "57号机", number: "57", state: .idle, progress: nil, endsAt: nil),
-            Item(id: 2, label: "58号机", number: "58", state: .busy, progress: 0.62, endsAt: .now.addingTimeInterval(11 * 60)),
+            Item(id: 2, label: "58号机", number: "58", state: .busy, progress: 0.62,
+                 startsAt: .now.addingTimeInterval(-18 * 60), endsAt: .now.addingTimeInterval(11 * 60)),
         ],
-        failed: false)
+        failed: false, updatedAt: .now)
 
     static func failure(_ date: Date) -> StatusEntry {
-        StatusEntry(date: date, building: "洗衣房", items: [], failed: true)
-    }
-}
-
-/// Countdown text that never builds an invalid range.
-struct Countdown: View {
-    let from: Date
-    let to: Date
-
-    var body: some View {
-        Text(timerInterval: from...max(to, from), countsDown: true)
-            .monospacedDigit()
+        StatusEntry(date: date, building: Wording.roomNoun, items: [], failed: true)
     }
 }
 
@@ -100,95 +100,185 @@ struct StatusWidgetView: View {
         }
     }
 
+    // MARK: What to say
+
+    private enum Summary {
+        case failed
+        case stale
+        case free(Int)
+        /// None confirmed free, but this many washes should have ended by now.
+        case likelyFree(Int)
+        case wait(StatusEntry.Item, Date)
+        case running
+        case unavailable
+    }
+
+    private var summary: Summary {
+        if entry.failed { return .failed }
+        if entry.stale { return .stale }
+        if entry.idle > 0 { return .free(entry.idle) }
+        if entry.predictedFree > 0 { return .likelyFree(entry.predictedFree) }
+        if let s = entry.soonest, let end = s.endsAt, end > entry.date { return .wait(s, end) }
+        if entry.items.contains(where: { $0.state == .busy }) { return .running }
+        return .unavailable
+    }
+
+    private func ink(_ state: DrumState) -> Color { Palette.ink(state, dark: scheme == .dark) }
+
     // MARK: Home Screen
 
     private var small: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("\(entry.building)洗衣房")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
+            title
             Spacer(minLength: 4)
-            summary(compact: true)
-            Spacer(minLength: 8)
-            VStack(alignment: .leading, spacing: 4) {
-                ForEach(entry.items.prefix(3)) { row($0, font: .caption) }
-            }
+            hero
+            Spacer(minLength: 4)
+            footnote
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .widgetURL(entry.link)
     }
 
     private var medium: some View {
-        HStack(alignment: .top, spacing: 18) {
+        HStack(alignment: .top, spacing: 16) {
             VStack(alignment: .leading, spacing: 0) {
-                Text("\(entry.building)洗衣房")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                title
                 Spacer(minLength: 4)
-                summary(compact: false)
-                Spacer(minLength: 0)
+                hero
+                Spacer(minLength: 4)
+                // Widgets refresh every few minutes at best, so say how old the reading is.
+                Text(entry.updatedAt.map { "\(Fmt.time($0)) 更新" } ?? " ")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 10) {
                 ForEach(entry.items.prefix(3)) { item in
-                    VStack(alignment: .leading, spacing: 5) {
-                        row(item, font: .subheadline)
-                        if item.state == .busy, let p = item.progress {
-                            ProgressView(value: p)
-                                .tint(Palette.water)
-                        }
-                    }
+                    Link(destination: DeepLink.machine(item.id)) { machineRow(item) }
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .frame(maxHeight: .infinity, alignment: .center)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         }
+        .widgetURL(entry.link)
     }
 
-    @ViewBuilder private func summary(compact: Bool) -> some View {
-        if entry.failed {
-            Text("无法连接")
-                .font(.headline)
-            Text("将自动重试")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        } else if entry.stale {
-            Text("数据未更新")
-                .font(.headline)
-            Text(entry.updatedAt.map { "最后更新于 \(Fmt.time($0))" } ?? "状态暂不可知")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        } else if entry.idle > 0 || entry.soonest == nil {
-            HStack(alignment: .firstTextBaseline, spacing: 3) {
-                Text("\(entry.idle)")
-                    .font(.system(size: compact ? 40 : 44, weight: .bold, design: .rounded))
-                    .foregroundStyle(entry.idle > 0 ? Palette.ink(.idle, dark: scheme == .dark) : .primary)
-                Text("台空闲")
+    private var title: some View {
+        Label(Wording.room(entry.building), systemImage: "washer.fill")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+    }
+
+    /// The one thing the widget is for, large.
+    @ViewBuilder private var hero: some View {
+        switch summary {
+        case .failed:
+            heroText("无法连接", symbol: "wifi.exclamationmark")
+        case .stale:
+            heroText("数据未更新", symbol: "clock.badge.exclamationmark")
+        case .free(let count):
+            heroCount(count, unit: "台空闲", color: ink(.idle))
+        case .likelyFree(let count):
+            heroCount(count, unit: "台应已完成", color: .primary)
+        case .wait(_, let end):
+            VStack(alignment: .leading, spacing: 0) {
+                Text("暂无空闲")
                     .font(.subheadline.weight(.semibold))
+                Countdown(from: entry.date, to: end, alignment: .leading)
+                    .font(.system(.largeTitle, design: .rounded).weight(.bold))
+                    .foregroundStyle(ink(.busy))
+                    .minimumScaleFactor(0.6)
+                    .widgetAccentable()
             }
-            Text(entry.predictedFree > 0 ? "另有 \(entry.predictedFree) 台应已完成" : "共 \(entry.total) 台")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        } else if let s = entry.soonest, let end = s.endsAt {
-            Text("暂无空闲")
-                .font(.headline)
-            Text("最早 \(Fmt.time(end)) 空闲")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            .accessibilityElement(children: .combine)
+        case .running:
+            heroText("暂无空闲", symbol: "timer")
+        case .unavailable:
+            heroText("暂无可用设备", symbol: "xmark.circle")
         }
     }
 
-    private func row(_ item: StatusEntry.Item, font: Font) -> some View {
-        HStack(spacing: 6) {
-            Circle()
-                .fill(Palette.tint(item.state))
-                .frame(width: 7, height: 7)
-            Text(item.label)
-                .lineLimit(1)
-            Spacer(minLength: 4)
-            status(item)
-                .foregroundStyle(Palette.ink(item.state, dark: scheme == .dark))
+    private func heroCount(_ count: Int, unit: String, color: Color) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
+            Text("\(count)")
+                .font(.system(.largeTitle, design: .rounded).weight(.bold))
+                .foregroundStyle(color)
+                .widgetAccentable()
+            Text(unit)
+                .font(.headline)
         }
-        .font(font.weight(.medium))
+        .lineLimit(1)
+        .minimumScaleFactor(0.7)
+        .accessibilityElement(children: .combine)
+    }
+
+    private func heroText(_ text: String, symbol: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Image(systemName: symbol)
+                .font(.title2.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .widgetAccentable()
+            Text(text)
+                .font(.headline)
+                .lineLimit(2)
+                .minimumScaleFactor(0.8)
+        }
+    }
+
+    /// One supporting line under the hero.
+    @ViewBuilder private var footnote: some View {
+        switch summary {
+        case .failed:
+            Text("将自动重试")
+        case .stale:
+            Text(entry.updatedAt.map { "\(Fmt.time($0)) 更新" } ?? "状态暂不可知")
+        case .free:
+            if entry.predictedFree > 0 {
+                Text("另有 \(entry.predictedFree) 台应已完成")
+            } else if let s = entry.soonest, let end = s.endsAt, end > entry.date {
+                // A clock time, not a bare countdown: "22:23" alone could be read as either.
+                Text("\(s.label) · \(Fmt.time(end)) 完成")
+            } else {
+                Text("共 \(entry.total) 台")
+            }
+        case .likelyFree:
+            Text("按预计时间推算")
+        case .wait(let item, let end):
+            Text("\(item.label) · \(Fmt.time(end)) 完成")
+        case .running:
+            Text("剩余时间未知")
+        case .unavailable:
+            Text("共 \(entry.total) 台")
+        }
+    }
+
+    private func machineRow(_ item: StatusEntry.Item) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 6) {
+                Image(systemName: item.predicted ? "checkmark.circle" : item.state.symbol)
+                    .foregroundStyle(Palette.tint(item.state))
+                    .widgetAccentable()
+                Text(item.label)
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                status(item)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(ink(item.state))
+            }
+            .font(.subheadline.weight(.medium))
+            if item.state == .busy {
+                CycleProgress(start: item.startsAt, end: item.endsAt, fraction: item.progress)
+                    .tint(Palette.water)
+                    .widgetAccentable()
+            }
+        }
+        .accessibilityElement(children: .combine)
     }
 
     @ViewBuilder private func status(_ item: StatusEntry.Item) -> some View {
@@ -198,8 +288,6 @@ struct StatusWidgetView: View {
         case .busy:
             if let end = item.endsAt, end > entry.date {
                 Countdown(from: entry.date, to: end)
-                    .multilineTextAlignment(.trailing)
-                    .frame(maxWidth: 56, alignment: .trailing)
             } else if item.endsAt != nil {
                 Text("即将完成")
             } else {
@@ -210,167 +298,89 @@ struct StatusWidgetView: View {
 
     // MARK: Lock Screen
 
+    /// A ring, like a complication: how many of the washers are free, or how far the soonest wash has got.
     @ViewBuilder private var circular: some View {
-        if entry.failed || entry.stale {
+        switch summary {
+        case .failed, .stale:
             ZStack {
                 AccessoryWidgetBackground()
                 Image(systemName: "exclamationmark.arrow.triangle.2.circlepath")
+                    .font(.title3.weight(.semibold))
             }
-        } else if entry.idle == 0, let s = entry.soonest, let end = s.endsAt, end > entry.date {
-            ZStack {
-                AccessoryWidgetBackground()
-                VStack(spacing: 0) {
-                    Text("剩余")
-                        .font(.system(size: 10, weight: .medium))
-                    Countdown(from: entry.date, to: end)
-                        .font(.system(size: 12, weight: .semibold))
-                        .multilineTextAlignment(.center)
-                }
-                .padding(4)
+            .accessibilityLabel(entry.failed ? "洗衣房无法连接" : "洗衣房数据未更新")
+        case .wait(let item, let end):
+            ProgressView(timerInterval: (item.startsAt ?? entry.date)...end, countsDown: false) {
+                Image(systemName: "washer.fill")
+            } currentValueLabel: {
+                Countdown(from: entry.date, to: end, alignment: .center)
+                    .font(.system(.caption, design: .rounded).weight(.semibold))
+                    .minimumScaleFactor(0.7)
             }
-        } else {
+            .progressViewStyle(.circular)
+            .widgetAccentable()
+        default:
             Gauge(value: Double(entry.idle), in: 0...Double(max(1, entry.total))) {
-                Text("空闲")
+                Image(systemName: "washer.fill")
             } currentValueLabel: {
                 Text("\(entry.idle)")
-                    .font(.system(.title3, design: .rounded).weight(.bold))
+                    .font(.system(.title2, design: .rounded).weight(.bold))
             }
-            .gaugeStyle(.accessoryCircularCapacity)
+            .gaugeStyle(.accessoryCircular)
             .widgetAccentable()
+            .accessibilityLabel("洗衣房")
+            .accessibilityValue("\(entry.idle) 台空闲，共 \(entry.total) 台")
         }
     }
 
     private var rectangular: some View {
         VStack(alignment: .leading, spacing: 1) {
-            Text(entry.failed ? "洗衣房 · 无法连接" : entry.stale ? "洗衣房 · 数据未更新" : "洗衣房 · \(entry.idle) 台空闲")
+            Label(rectangularTitle, systemImage: "washer.fill")
                 .font(.headline)
                 .widgetAccentable()
-            ForEach(entry.items.prefix(2)) { item in
-                HStack(spacing: 4) {
-                    Text(item.label)
-                    Spacer(minLength: 2)
-                    status(item)
+            if entry.failed || entry.stale || entry.items.isEmpty {
+                Text(entry.failed ? "将自动重试" : entry.updatedAt.map { "\(Fmt.time($0)) 更新" } ?? "状态暂不可知")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(entry.items.prefix(2)) { item in
+                    HStack(spacing: 4) {
+                        Text(item.label)
+                        Spacer(minLength: 2)
+                        status(item)
+                    }
+                    .font(.subheadline.weight(.medium))
+                    .accessibilityElement(children: .combine)
                 }
-                .font(.caption)
             }
+        }
+        .lineLimit(1)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+    }
+
+    private var rectangularTitle: String {
+        switch summary {
+        case .failed: return "无法连接"
+        case .stale: return "数据未更新"
+        case .free(let count): return "\(count) 台空闲"
+        case .likelyFree(let count): return "\(count) 台应已完成"
+        case .wait, .running: return "暂无空闲"
+        case .unavailable: return "暂无可用设备"
         }
     }
 
     private var inline: some View {
         Label {
-            if entry.failed {
-                Text("洗衣房无法连接")
-            } else if entry.stale {
-                Text("洗衣房数据未更新")
-            } else if entry.idle > 0 {
-                Text("洗衣机 \(entry.idle)/\(entry.total) 台空闲")
-            } else if let s = entry.soonest, let end = s.endsAt {
-                Text("洗衣机预计 \(Fmt.time(end)) 空闲")
-            } else {
-                Text("洗衣机暂无空闲")
+            switch summary {
+            case .failed: Text("洗衣房无法连接")
+            case .stale: Text("洗衣房数据未更新")
+            case .free(let count): Text("\(count) 台洗衣机空闲")
+            case .likelyFree(let count): Text("\(count) 台洗衣机应已完成")
+            case .wait(_, let end): Text("洗衣机最早 \(Fmt.time(end)) 空闲")
+            case .running: Text("洗衣机暂无空闲")
+            case .unavailable: Text("洗衣机暂不可用")
             }
         } icon: {
-            Image(systemName: "washer")
-        }
-    }
-}
-
-// MARK: - Live Activity
-
-enum ActivityWords {
-    static func headline(_ s: LaundryActivityAttributes.ContentState) -> String {
-        if s.idleCount > 0 { return "\(s.idleCount) 台空闲" }
-        if s.machines.contains(where: { $0.state == .busy }) { return "暂无空闲" }
-        return "暂无可用设备"
-    }
-
-    static func detail(_ s: LaundryActivityAttributes.ContentState) -> String {
-        if s.idleCount > 0 { return "共 \(s.machines.count) 台，可立即使用" }
-        if let soon = s.soonest, let end = soon.endsAt { return "最早 \(Fmt.time(end)) 空闲" }
-        return "剩余时间暂不可知"
-    }
-
-    static func tint(_ s: LaundryActivityAttributes.ContentState) -> Color {
-        s.idleCount > 0 ? Palette.fresh : Palette.water
-    }
-
-    @ViewBuilder static func trailing(_ s: LaundryActivityAttributes.ContentState) -> some View {
-        if s.idleCount > 0 {
-            Text("空闲 \(s.idleCount)")
-        } else if let soon = s.soonest, let end = soon.endsAt {
-            Countdown(from: s.updatedAt, to: end)
-                .multilineTextAlignment(.trailing)
-        } else {
-            Text("运行中")
-        }
-    }
-}
-
-struct LockScreenActivity: View {
-    let state: LaundryActivityAttributes.ContentState
-    var isStale = false
-
-    var body: some View {
-        HStack(alignment: .center, spacing: 16) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text("\(state.building)洗衣房")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                Text(isStale ? "数据已过时" : ActivityWords.headline(state))
-                    .font(.title3.weight(.bold))
-                Text(isStale ? "最后更新于 \(Fmt.time(state.updatedAt))，请打开应用刷新" : ActivityWords.detail(state))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            VStack(alignment: .leading, spacing: 8) {
-                ForEach(state.machines.prefix(3)) { m in
-                    ActivityRow(machine: m, updatedAt: state.updatedAt)
-                }
-            }
-            .frame(maxWidth: .infinity)
-            .opacity(isStale ? 0.45 : 1)
-        }
-        .padding(16)
-    }
-}
-
-struct ActivityRow: View {
-    let machine: LaundryActivityAttributes.Machine
-    let updatedAt: Date
-
-    @Environment(\.colorScheme) private var scheme
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(Palette.tint(machine.state))
-                    .frame(width: 7, height: 7)
-                Text(machine.label)
-                Spacer(minLength: 4)
-                Group {
-                    switch machine.state {
-                    case .idle: Text("空闲")
-                    case .offline: Text("不可用")
-                    case .busy:
-                        if let end = machine.endsAt {
-                            Countdown(from: updatedAt, to: end)
-                                .multilineTextAlignment(.trailing)
-                                .frame(maxWidth: 52, alignment: .trailing)
-                        } else {
-                            Text("运行中")
-                        }
-                    }
-                }
-                .foregroundStyle(Palette.ink(machine.state, dark: scheme == .dark))
-            }
-            .font(.subheadline.weight(.medium))
-            if machine.state == .busy, let p = machine.progress {
-                ProgressView(value: p)
-                    .tint(Palette.water)
-            }
+            Image(systemName: "washer.fill")
         }
     }
 }

@@ -5,6 +5,8 @@ import SwiftUI
 struct UsageCard: View {
     @Environment(LaundryStore.self) private var store
     @State private var scrubX: CGFloat?
+    /// Minutes from the start of the window to the moment under the finger.
+    @State private var scrubMinute: Int?
 
     var body: some View {
         let machines = store.machines
@@ -14,11 +16,22 @@ struct UsageCard: View {
 
         SectionCard(title: "近 24 小时使用记录") {
             VStack(alignment: .leading, spacing: 14) {
-                HStack(spacing: 24) {
-                    figure("\(sessions)", unit: "次", caption: "洗涤次数")
-                    figure(observed > 0 ? "\(Int((Double(busy) / Double(observed) * 100).rounded()))" : "—",
-                           unit: observed > 0 ? "%" : "", caption: "平均使用率")
+                // While a finger is down, the totals give way to the moment being read. The reading
+                // goes here, not in a bubble over the bars, so it never hides what it describes.
+                ZStack(alignment: .topLeading) {
+                    HStack(spacing: 24) {
+                        figure("\(sessions)", unit: "次", caption: "洗涤次数")
+                        figure(observed > 0 ? "\(Int((Double(busy) / Double(observed) * 100).rounded()))" : "—",
+                               unit: observed > 0 ? "%" : "", caption: "平均使用率")
+                    }
+                    .opacity(scrubMinute == nil ? 1 : 0)
+                    .accessibilityHidden(scrubMinute != nil)
+                    if let minute = scrubMinute {
+                        readout(minute: minute, machines: machines)
+                            .transition(.opacity)
+                    }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
 
                 GeometryReader { geo in
                     let width = geo.size.width
@@ -35,7 +48,7 @@ struct UsageCard: View {
                         HourAxis(windowStart: store.windowStart, windowMinutes: store.windowMinutes)
                     }
                     .overlay(alignment: .topLeading) {
-                        if let x = scrubX { scrubOverlay(x: x, width: width, machines: machines) }
+                        if let x = scrubX { scrubLine(x: x, machines: machines.count) }
                     }
                     .contentShape(.rect)
                     .gesture(scrub(width: width))
@@ -87,35 +100,45 @@ struct UsageCard: View {
             .sequenced(before: DragGesture(minimumDistance: 0))
             .onChanged { value in
                 guard case .second(true, let drag) = value else { return }
-                let x = drag?.location.x ?? scrubX ?? width
-                scrubX = min(width - 1, max(0, x))
+                let x = min(width - 1, max(0, drag?.location.x ?? scrubX ?? width))
+                scrubX = x
+                scrubMinute = Int(x / max(1, width) * CGFloat(store.windowMinutes))
             }
-            .onEnded { _ in withAnimation(.smooth) { scrubX = nil } }
+            .onEnded { _ in
+                withAnimation(.smooth) {
+                    scrubX = nil
+                    scrubMinute = nil
+                }
+            }
     }
 
-    private func scrubOverlay(x: CGFloat, width: CGFloat, machines: [MachineState]) -> some View {
-        let offset = Int(x / max(1, width) * CGFloat(store.windowMinutes))
-        let epoch = store.windowStart + offset * 60
-        let lines = machines.map { m -> String in
-            let s = m.state(at: offset)
-            return "\(m.label)：\(s == 20 ? "运行中" : s == 10 ? "空闲" : "无记录")"
-        }
-        return ZStack(alignment: .topLeading) {
-            Rectangle()
-                .fill(Color.primary.opacity(0.7))
-                .frame(width: 1.5, height: CGFloat(machines.count) * 40)
-                .offset(x: x)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(Fmt.clock(epoch)).font(.caption.weight(.bold)).monospacedDigit()
-                ForEach(lines, id: \.self) { Text($0).font(.caption2) }
+    /// The moment under the finger, in the same shape as the totals it stands in for.
+    private func readout(minute: Int, machines: [MachineState]) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(Fmt.clock(store.windowStart + minute * 60))
+                .font(.system(.title, design: .rounded).weight(.semibold))
+                .monospacedDigit()
+            HStack(spacing: 12) {
+                ForEach(machines) { m in
+                    let s = m.state(at: minute)
+                    legend(s == 20 ? Palette.water : s == 10 ? Palette.fresh.opacity(0.55) : Color(.tertiarySystemFill),
+                           "\(m.label) \(s == 20 ? "运行中" : s == 10 ? "空闲" : "无记录")")
+                }
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
-            .background(.regularMaterial, in: .rect(cornerRadius: 8))
-            .fixedSize()
-            .offset(x: x > width / 2 ? x - 126 : x + 8, y: -4)
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.75)
         }
-        .allowsHitTesting(false)
+        .accessibilityElement(children: .combine)
+    }
+
+    private func scrubLine(x: CGFloat, machines: Int) -> some View {
+        Rectangle()
+            .fill(Color.primary.opacity(0.7))
+            .frame(width: 1.5, height: CGFloat(machines) * 40)
+            .offset(x: x)
+            .allowsHitTesting(false)
     }
 }
 
