@@ -244,9 +244,12 @@ def cmd_submit_beta_review(build_id: str):
     res = call("POST", "/v1/betaAppReviewSubmissions", {"data": {
         "type": "betaAppReviewSubmissions",
         "relationships": {"build": {"data": {"type": "builds", "id": build_id}}}}},
-        ok_status=(409,))
-    if res.get("_status") == 409:
-        log(f"Beta review submission not needed or not possible yet:\n{res['_detail']}")
+        ok_status=(409, 422))
+    if res.get("_status"):
+        # Don't fail the upload over this; the build is on TestFlight either way.
+        print(f"::warning::Beta review submission refused (HTTP {res['_status']}); "
+              f"submit it from App Store Connect if needed.", flush=True)
+        log(res["_detail"])
     else:
         log("Submitted for beta review.")
 

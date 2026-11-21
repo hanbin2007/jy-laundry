@@ -29,7 +29,9 @@ Every build goes to two TestFlight groups:
   why the pipeline only bumps the build number.
 
 The Test Information Apple needs for beta review (description, feedback email,
-review contact) is set once with `scripts/ci/asc.py set-test-info`.
+privacy policy URL, review contact) is set once with
+`scripts/ci/asc.py set-test-info`. The privacy policy is
+[docs/PRIVACY.md](PRIVACY.md).
 
 Only this repo uploads builds; the TestFlight job is skipped in forks, and
 pull requests from forks never see the secrets.
