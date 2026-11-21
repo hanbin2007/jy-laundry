@@ -1,0 +1,104 @@
+name: CI
+
+# Builds the iOS app (and runs its tests, once a test target exists) and checks
+# the polling server on every pull request and every push except to main.
+# Pushes to main and v* tags run this same workflow from testflight.yml first.
+on:
+  pull_request:
+  push:
+    branches-ignore: [main]
+  workflow_call:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  XCODE_APP: /Applications/Xcode_27.2.app
+
+jobs:
+  ios:
+    name: iOS build & test
+    runs-on: xcode-27
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Select Xcode
+        run: |
+          sudo xcode-select -s "$XCODE_APP"
+          xcodebuild -version
+
+      - name: Build (simulator, unsigned)
+        run: |
+          set -o pipefail
+          mkdir -p build
+          xcodebuild build \
+            -project Laundry.xcodeproj -scheme Laundry -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            | tee build/build.log | grep -E "error:|warning:|\*\* BUILD" || true
+          grep -q "\*\* BUILD SUCCEEDED \*\*" build/build.log
+
+      - name: Release build (device, unsigned)
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project Laundry.xcodeproj -scheme Laundry -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            > build/release.log 2>&1 || { grep -E "error:" build/release.log; tail -40 build/release.log; exit 1; }
+          grep -E "\*\* BUILD" build/release.log
+
+      - name: Unit tests
+        run: |
+          if ! grep -q "<TestableReference" Laundry.xcodeproj/xcshareddata/xcschemes/Laundry.xcscheme; then
+            echo "::notice::The Laundry scheme has no test targets yet; skipping tests."
+            exit 0
+          fi
+          SIM=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin)["devices"]; print(next(x["udid"] for k,v in d.items() if "iOS" in k for x in v if x["name"].startswith("iPhone")))')
+          xcodebuild test \
+            -project Laundry.xcodeproj -scheme Laundry \
+            -destination "id=$SIM" \
+            -derivedDataPath build/DerivedData \
+            -resultBundlePath build/Tests.xcresult \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Upload logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-build-logs
+          path: |
+            build/*.log
+            build/Tests.xcresult
+          if-no-files-found: ignore
+
+  server:
+    name: Server checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Python syntax
+        run: |
+          files=$(git ls-files 'server/*.py' 'server/**/*.py' 'scripts/**/*.py')
+          echo "$files"
+          python -m py_compile $files
+
+      - name: Shell scripts
+        run: |
+          files=$(git ls-files '*.sh')
+          echo "$files"
+          shellcheck -S error $files

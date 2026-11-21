@@ -1,0 +1,114 @@
+name: TestFlight
+
+# Continuous delivery: every push to main (and every v* tag) runs CI, then
+# archives, signs and uploads a build to TestFlight with a fresh build number.
+# A tag like v1.2.0 also sets the app version to 1.2.0.
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      notes:
+        description: "What to Test text (default: commit messages)"
+        required: false
+        type: string
+
+concurrency:
+  group: testflight
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  XCODE_APP: /Applications/Xcode_27.2.app
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  deliver:
+    name: Upload to TestFlight
+    needs: ci
+    runs-on: xcode-27
+    timeout-minutes: 75
+    env:
+      ASC_KEY_ID: ${{ vars.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ vars.ASC_ISSUER_ID }}
+      ASC_KEY_PATH: ${{ github.workspace }}/../asc/AuthKey.p8
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Select Xcode
+        run: |
+          sudo xcode-select -s "$XCODE_APP"
+          xcodebuild -version
+
+      - name: Install App Store Connect API key
+        env:
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+        run: |
+          if [ -z "$ASC_KEY_ID" ] || [ -z "$ASC_ISSUER_ID" ] || [ -z "$ASC_PRIVATE_KEY" ]; then
+            echo "::error::Set repo variables ASC_KEY_ID, ASC_ISSUER_ID and secret ASC_PRIVATE_KEY (see docs/CI.md)."
+            exit 1
+          fi
+          mkdir -p "$(dirname "$ASC_KEY_PATH")"
+          printf '%s\n' "$ASC_PRIVATE_KEY" > "$ASC_KEY_PATH"
+          chmod 600 "$ASC_KEY_PATH"
+
+      - name: Version and release notes
+        env:
+          INPUT_NOTES: ${{ inputs.notes }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "MARKETING_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+          fi
+          notes="$RUNNER_TEMP/whats-new.txt"
+          {
+            if [ -n "$INPUT_NOTES" ]; then
+              printf '%s\n' "$INPUT_NOTES"
+            elif [ -n "$BEFORE" ] && [ "$BEFORE" != "0000000000000000000000000000000000000000" ] \
+                 && git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+              git log --no-merges --format='- %s' "$BEFORE..$GITHUB_SHA" | head -30
+            else
+              git log --no-merges --format='- %s' -5
+            fi
+            echo
+            echo "$GITHUB_REF_NAME @ ${GITHUB_SHA::7}"
+          } > "$notes"
+          cat "$notes"
+          echo "WHATS_NEW_FILE=$notes" >> "$GITHUB_ENV"
+
+      - name: Archive, sign and upload
+        id: upload
+        run: bash scripts/ci/testflight.sh
+
+      - name: Summary
+        run: |
+          {
+            echo "### TestFlight"
+            echo "Uploaded **${{ steps.upload.outputs.version }} (${{ steps.upload.outputs.build }})** from \`${GITHUB_SHA::7}\`."
+            echo
+            echo '```'
+            cat "$WHATS_NEW_FILE"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep dSYMs and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: testflight-${{ github.run_number }}
+          path: |
+            build/Laundry.xcarchive/dSYMs
+            build/*.log
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Remove API key
+        if: always()
+        run: rm -f "$ASC_KEY_PATH"
