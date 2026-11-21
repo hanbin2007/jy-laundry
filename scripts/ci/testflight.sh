@@ -3,10 +3,13 @@
 # Used by .github/workflows/testflight.yml and runnable on a Mac by hand.
 #
 # Needs: ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_PATH (App Store Connect API key).
+# The version (MARKETING_VERSION) always comes from the Xcode project; each
+# upload only gets a new build number.
 # Optional:
-#   MARKETING_VERSION  override the version (e.g. from a v1.2.0 tag)
 #   BUILD_NUMBER       override the build number (default: highest uploaded + 1)
 #   WHATS_NEW_FILE     text file for TestFlight "What to Test"
+#   PUBLIC_BETA_GROUP  external group with the public link (default "Public Beta";
+#                      empty to skip the public beta)
 #   EXPORT_ONLY=1      sign and export an .ipa locally instead of uploading
 set -euo pipefail
 
@@ -40,10 +43,8 @@ AUTH=(-allowProvisioningUpdates
       -authenticationKeyID "$ASC_KEY_ID"
       -authenticationKeyIssuerID "$ASC_ISSUER_ID")
 
-if [[ -z "${MARKETING_VERSION:-}" ]]; then
-  MARKETING_VERSION="$(xcodebuild -project "$PROJECT" -scheme "$SCHEME" -configuration Release \
-    -showBuildSettings 2>/dev/null | awk -F' = ' '/ MARKETING_VERSION = /{print $2; exit}')"
-fi
+MARKETING_VERSION="$(xcodebuild -project "$PROJECT" -scheme "$SCHEME" -configuration Release \
+  -showBuildSettings 2>/dev/null | awk -F' = ' '/ MARKETING_VERSION = /{print $2; exit}')"
 if [[ -z "${BUILD_NUMBER:-}" ]]; then
   BUILD_NUMBER="$($ASC next-build-number "$BUNDLE_ID")"
 fi
@@ -74,7 +75,6 @@ run_logged "$OUT/archive.log" xcodebuild archive \
   -project "$PROJECT" -scheme "$SCHEME" -configuration Release \
   -destination 'generic/platform=iOS' \
   -archivePath "$ARCHIVE" \
-  MARKETING_VERSION="$MARKETING_VERSION" \
   CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
   CODE_SIGNING_ALLOWED=NO
 
@@ -100,4 +100,17 @@ if [[ -n "${WHATS_NEW_FILE:-}" && -s "$WHATS_NEW_FILE" ]]; then
   $ASC set-whats-new "$BUILD_ID" "$WHATS_NEW_FILE" en-US
 fi
 $ASC ensure-group "$BUNDLE_ID" "Internal" >/dev/null
+
+# Public beta: the external group with the public link gets every build. Apple
+# reviews the first build of each version; later builds of the same version
+# are usually approved automatically.
+PUBLIC_GROUP="${PUBLIC_BETA_GROUP-Public Beta}"
+if [[ -n "$PUBLIC_GROUP" ]]; then
+  echo "==> Public beta ($PUBLIC_GROUP)"
+  PUBLIC_LINK="$($ASC ensure-public-group "$BUNDLE_ID" "$PUBLIC_GROUP")"
+  $ASC add-to-group "$BUILD_ID" "$PUBLIC_GROUP"
+  $ASC submit-beta-review "$BUILD_ID"
+  echo "Public link: $PUBLIC_LINK"
+  [[ -n "${GITHUB_OUTPUT:-}" ]] && echo "public_link=$PUBLIC_LINK" >> "$GITHUB_OUTPUT"
+fi
 echo "==> $MARKETING_VERSION ($BUILD_NUMBER) is on TestFlight"

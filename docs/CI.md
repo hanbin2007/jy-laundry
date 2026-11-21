@@ -8,14 +8,28 @@
 | Event | Workflow | What happens |
 |---|---|---|
 | Pull request, push to any branch except `main` | `CI` | iOS Debug build (simulator) and Release build (device, unsigned), unit tests if the scheme has any, server Python and shell checks |
-| Push to `main` | `TestFlight` | Runs `CI`, then archives, signs and uploads a new build to TestFlight |
-| Tag `v1.2.0` | `TestFlight` | Same, with the app version set to `1.2.0` |
+| Push to `main` | `TestFlight` | Runs `CI`, then archives, signs and uploads a new build to TestFlight and the public beta |
 | Manual (Actions → TestFlight → Run workflow) | `TestFlight` | Same, with optional "What to Test" text |
 
-Each upload gets build number *highest build on App Store Connect + 1*, so
-numbers never clash, even with builds uploaded by hand. The "What to Test" text
-is the list of commit messages in the push. Every build goes to the internal
-TestFlight group **Internal**, which receives all builds automatically.
+The version stays as set in the Xcode project (`MARKETING_VERSION`); each
+upload only gets build number *highest build on App Store Connect + 1*, so
+numbers never clash, even with builds uploaded by hand. To ship a new version,
+change `MARKETING_VERSION` in the project. The "What to Test" text is the list
+of commit messages in the push.
+
+## Public beta
+
+Every build goes to two TestFlight groups:
+
+- **Internal**: team members, get every build straight away.
+- **Public Beta**: external group with a public TestFlight link (shown in each
+  run's summary). The pipeline adds each build to it and submits it for beta
+  review. Apple reviews the first build of each version, which can take a day;
+  later builds of the same version are usually approved automatically, which is
+  why the pipeline only bumps the build number.
+
+The Test Information Apple needs for beta review (description, feedback email,
+review contact) is set once with `scripts/ci/asc.py set-test-info`.
 
 Only this repo uploads builds; the TestFlight job is skipped in forks, and
 pull requests from forks never see the secrets.

@@ -2,7 +2,7 @@ name: CI
 
 # Builds the iOS app (and runs its tests, once a test target exists) and checks
 # the polling server on every pull request and every push except to main.
-# Pushes to main and v* tags run this same workflow from testflight.yml first.
+# Pushes to main run this same workflow from testflight.yml first.
 on:
   pull_request:
   push:
