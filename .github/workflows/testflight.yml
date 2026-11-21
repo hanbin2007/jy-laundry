@@ -40,7 +40,7 @@ jobs:
       ASC_ISSUER_ID: ${{ vars.ASC_ISSUER_ID }}
       ASC_KEY_PATH: ${{ github.workspace }}/../asc/AuthKey.p8
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
