@@ -14,6 +14,9 @@ Commands:
   set-whats-new BUILD_ID FILE [LOCALE]    set the TestFlight "What to Test" text
   ensure-group BUNDLE_ID NAME             ensure an internal beta group that gets every build
   add-to-group BUILD_ID GROUP_NAME        add a build to a (external) beta group
+  ensure-public-group BUNDLE_ID NAME      ensure an external group with a public link, print it
+  submit-beta-review BUILD_ID             submit a build for TestFlight beta review
+  set-test-info BUNDLE_ID FILE.json       one-time TestFlight Test Information
 """
 import base64
 import json
@@ -70,7 +73,7 @@ def token() -> str:
     return _token["value"]
 
 
-def call(method: str, path: str, body=None, query=None):
+def call(method: str, path: str, body=None, query=None, ok_status=()):
     url = API + path
     if query:
         url += "?" + urllib.parse.urlencode(query)
@@ -85,6 +88,8 @@ def call(method: str, path: str, body=None, query=None):
             return json.loads(raw) if raw else {}
     except urllib.error.HTTPError as e:
         detail = e.read().decode(errors="replace")
+        if e.code in ok_status:
+            return {"_status": e.code, "_detail": detail}
         raise SystemExit(f"App Store Connect API {method} {path} failed: HTTP {e.code}\n{detail}")
 
 
@@ -209,6 +214,76 @@ def cmd_add_to_group(build_id: str, group_name: str):
     log(f"Added build to '{group_name}'.")
 
 
+def cmd_ensure_public_group(bundle_id: str, name: str):
+    """External beta group with a public TestFlight link; prints the link."""
+    aid = app_id(bundle_id)
+    g = _group(aid, name)
+    if not g:
+        g = call("POST", "/v1/betaGroups", {"data": {
+            "type": "betaGroups",
+            "attributes": {"name": name, "publicLinkEnabled": True,
+                           "publicLinkLimitEnabled": False, "feedbackEnabled": True},
+            "relationships": {"app": {"data": {"type": "apps", "id": aid}}}}})["data"]
+        log(f"Created external beta group '{name}' ({g['id']}).")
+    elif not g["attributes"].get("publicLinkEnabled"):
+        g = call("PATCH", f"/v1/betaGroups/{g['id']}", {"data": {
+            "type": "betaGroups", "id": g["id"],
+            "attributes": {"publicLinkEnabled": True, "publicLinkLimitEnabled": False}}})["data"]
+        log(f"Turned on the public link for '{name}'.")
+    print(g["attributes"].get("publicLink") or "(public link appears once a build is approved)")
+
+
+def cmd_submit_beta_review(build_id: str):
+    """Submit a build for TestFlight external (beta) review, unless already submitted."""
+    res = call("GET", f"/v1/builds/{build_id}/buildBetaDetail")
+    state = res.get("data", {}).get("attributes", {}).get("externalBuildState")
+    log(f"External build state: {state}")
+    if state in ("WAITING_FOR_BETA_REVIEW", "IN_BETA_REVIEW", "BETA_APPROVED",
+                 "IN_BETA_TESTING", "READY_FOR_BETA_TESTING"):
+        return
+    res = call("POST", "/v1/betaAppReviewSubmissions", {"data": {
+        "type": "betaAppReviewSubmissions",
+        "relationships": {"build": {"data": {"type": "builds", "id": build_id}}}}},
+        ok_status=(409, 422))
+    if res.get("_status"):
+        # Don't fail the upload over this; the build is on TestFlight either way.
+        print(f"::warning::Beta review submission refused (HTTP {res['_status']}); "
+              f"submit it from App Store Connect if needed.", flush=True)
+        log(res["_detail"])
+    else:
+        log("Submitted for beta review.")
+
+
+def cmd_set_test_info(bundle_id: str, info_file: str):
+    """One-time TestFlight Test Information from a JSON file:
+    {"locale": "zh-Hans", "description": "...", "feedbackEmail": "...",
+     "privacyPolicyUrl": "...", "contact": {"firstName": "...", "lastName": "...",
+     "phone": "...", "email": "..."}}"""
+    with open(info_file, encoding="utf-8") as f:
+        info = json.load(f)
+    aid = app_id(bundle_id)
+    locale = info.get("locale", "en-US")
+    attrs = {k: info[k] for k in ("description", "feedbackEmail", "privacyPolicyUrl", "marketingUrl") if info.get(k)}
+    res = call("GET", f"/v1/apps/{aid}/betaAppLocalizations")
+    existing = [l for l in res.get("data", []) if l["attributes"]["locale"] == locale]
+    if existing:
+        call("PATCH", f"/v1/betaAppLocalizations/{existing[0]['id']}", {"data": {
+            "type": "betaAppLocalizations", "id": existing[0]["id"], "attributes": attrs}})
+    else:
+        call("POST", "/v1/betaAppLocalizations", {"data": {
+            "type": "betaAppLocalizations", "attributes": {"locale": locale, **attrs},
+            "relationships": {"app": {"data": {"type": "apps", "id": aid}}}}})
+    log(f"Set beta app description ({locale}).")
+    c = info["contact"]
+    detail = call("GET", f"/v1/apps/{aid}/betaAppReviewDetail")["data"]
+    call("PATCH", f"/v1/betaAppReviewDetails/{detail['id']}", {"data": {
+        "type": "betaAppReviewDetails", "id": detail["id"], "attributes": {
+            "contactFirstName": c["firstName"], "contactLastName": c["lastName"],
+            "contactPhone": c["phone"], "contactEmail": c["email"],
+            "demoAccountRequired": False, "notes": info.get("reviewNotes", "")}}})
+    log("Set beta review contact details.")
+
+
 COMMANDS = {
     "register-bundle-id": cmd_register_bundle_id,
     "app-id": cmd_app_id,
@@ -217,6 +292,9 @@ COMMANDS = {
     "set-whats-new": cmd_set_whats_new,
     "ensure-group": cmd_ensure_group,
     "add-to-group": cmd_add_to_group,
+    "ensure-public-group": cmd_ensure_public_group,
+    "submit-beta-review": cmd_submit_beta_review,
+    "set-test-info": cmd_set_test_info,
 }
 
 if __name__ == "__main__":

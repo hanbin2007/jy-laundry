@@ -1,12 +1,11 @@
 name: TestFlight
 
-# Continuous delivery: every push to main (and every v* tag) runs CI, then
-# archives, signs and uploads a build to TestFlight with a fresh build number.
-# A tag like v1.2.0 also sets the app version to 1.2.0.
+# Continuous delivery: every push to main runs CI, then archives, signs and
+# uploads a build to TestFlight and the public beta. The version stays as set in
+# the Xcode project; each build only gets the next build number.
 on:
   push:
     branches: [main]
-    tags: ["v*"]
   workflow_dispatch:
     inputs:
       notes:
@@ -61,14 +60,11 @@ jobs:
           printf '%s\n' "$ASC_PRIVATE_KEY" > "$ASC_KEY_PATH"
           chmod 600 "$ASC_KEY_PATH"
 
-      - name: Version and release notes
+      - name: Release notes
         env:
           INPUT_NOTES: ${{ inputs.notes }}
           BEFORE: ${{ github.event.before }}
         run: |
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            echo "MARKETING_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
-          fi
           notes="$RUNNER_TEMP/whats-new.txt"
           {
             if [ -n "$INPUT_NOTES" ]; then
@@ -97,6 +93,8 @@ jobs:
           {
             echo "### TestFlight"
             echo "Uploaded **${{ steps.upload.outputs.version }} (${{ steps.upload.outputs.build }})** from \`${GITHUB_SHA::7}\`."
+            echo
+            echo "Public beta: ${{ steps.upload.outputs.public_link }}"
             echo
             echo '```'
             cat "$WHATS_NEW_FILE"
