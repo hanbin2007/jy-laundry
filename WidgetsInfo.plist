@@ -20,6 +20,10 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>LaundryServerToken</key>
+	<string>$(LAUNDRY_SERVER_TOKEN)</string>
+	<key>LaundryServerURL</key>
+	<string>$(LAUNDRY_SERVER_URL)</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>

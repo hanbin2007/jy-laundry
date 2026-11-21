@@ -1,0 +1,11 @@
+// Server settings for the app and its widgets, read at run time from Info.plist.
+//
+// They are not stored in the repo. For local builds, copy
+// Secrets.example.xcconfig to Secrets.xcconfig (gitignored) and fill it in.
+// CI passes them on the xcodebuild command line from GitHub secrets.
+// Left empty, the app starts with no server set; enter one in Settings.
+
+LAUNDRY_SERVER_URL =
+LAUNDRY_SERVER_TOKEN =
+
+#include? "Secrets.xcconfig"

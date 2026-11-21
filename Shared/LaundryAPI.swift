@@ -1,8 +1,15 @@
 import Foundation
 
+/// Default server settings, filled in at build time from LAUNDRY_SERVER_URL and
+/// LAUNDRY_SERVER_TOKEN (see Config/Base.xcconfig). Empty when not provided.
 enum Config {
-    static let defaultBaseURL = "http://laundry.example.com/laundry"
-    static let defaultToken = "REDACTED_TOKEN"
+    static let defaultBaseURL = infoValue("LaundryServerURL")
+    static let defaultToken = infoValue("LaundryServerToken")
+
+    private static func infoValue(_ key: String) -> String {
+        let value = Bundle.main.object(forInfoDictionaryKey: key) as? String ?? ""
+        return value.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 }
 
 enum APIError: LocalizedError {

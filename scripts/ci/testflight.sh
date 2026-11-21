@@ -15,6 +15,19 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
 
+# Server settings go into the gitignored Config/Secrets.xcconfig (never on the
+# xcodebuild command line, which would print them into the build log).
+SECRETS="$ROOT/Config/Secrets.xcconfig"
+if [[ -n "${LAUNDRY_SERVER_URL:-}" && -n "${LAUNDRY_SERVER_TOKEN:-}" ]]; then
+  # "//" starts a comment in xcconfig files; "/$()/" is the usual escape.
+  escaped_url="${LAUNDRY_SERVER_URL//\/\//\/\$()\/}"
+  printf 'LAUNDRY_SERVER_URL = %s\nLAUNDRY_SERVER_TOKEN = %s\n' "$escaped_url" "$LAUNDRY_SERVER_TOKEN" > "$SECRETS"
+fi
+if ! grep -Eq '^LAUNDRY_SERVER_TOKEN *= *[^ ]' "$SECRETS" 2>/dev/null; then
+  echo "No server settings: set LAUNDRY_SERVER_URL and LAUNDRY_SERVER_TOKEN, or fill in Config/Secrets.xcconfig." >&2
+  exit 1
+fi
+
 PROJECT=Laundry.xcodeproj
 SCHEME=Laundry
 BUNDLE_ID=com.zhanghanbin.laundry

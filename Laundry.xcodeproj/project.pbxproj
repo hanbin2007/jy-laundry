@@ -39,6 +39,7 @@
 		AA00000000000000000000C1 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		AA00000000000000000000D3 /* LaundryWidgetsExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = LaundryWidgetsExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA00000000000000000000F1 /* WidgetsInfo.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = WidgetsInfo.plist; sourceTree = "<group>"; };
+		AA00000000000000000000FA /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Base.xcconfig; path = Config/Base.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -85,6 +86,7 @@
 				AA00000000000000000000F5 /* Shared */,
 				AA00000000000000000000C1 /* Info.plist */,
 				AA00000000000000000000F1 /* WidgetsInfo.plist */,
+				AA00000000000000000000FA /* Base.xcconfig */,
 				AA00000000000000000000A2 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -232,6 +234,7 @@
 /* Begin XCBuildConfiguration section */
 		AA00000000000000000000B2 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = AA00000000000000000000FA /* Base.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -273,6 +276,7 @@
 		};
 		AA00000000000000000000B3 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = AA00000000000000000000FA /* Base.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;

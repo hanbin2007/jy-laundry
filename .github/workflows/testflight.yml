@@ -31,6 +31,8 @@ jobs:
   deliver:
     name: Upload to TestFlight
     needs: ci
+    # Only the owner's repo ships builds; forks of this public repo don't.
+    if: github.repository == 'hanbin2007/jy-laundry'
     runs-on: xcode-27
     timeout-minutes: 75
     env:
@@ -85,6 +87,9 @@ jobs:
 
       - name: Archive, sign and upload
         id: upload
+        env:
+          LAUNDRY_SERVER_URL: ${{ secrets.LAUNDRY_SERVER_URL }}
+          LAUNDRY_SERVER_TOKEN: ${{ secrets.LAUNDRY_SERVER_TOKEN }}
         run: bash scripts/ci/testflight.sh
 
       - name: Summary
@@ -109,6 +114,6 @@ jobs:
           if-no-files-found: ignore
           retention-days: 30
 
-      - name: Remove API key
+      - name: Remove API key and server settings
         if: always()
-        run: rm -f "$ASC_KEY_PATH"
+        run: rm -f "$ASC_KEY_PATH" Config/Secrets.xcconfig

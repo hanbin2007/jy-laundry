@@ -14,3 +14,6 @@ server/token
 server/data/
 # CI output
 build/
+
+# Local server settings (see Config/Secrets.example.xcconfig)
+Config/Secrets.xcconfig
